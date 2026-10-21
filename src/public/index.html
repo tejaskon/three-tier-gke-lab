@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Three-Tier GKE Lab</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f4f4f9; }
+        .card { background: white; padding: 20px; border-radius: 8px; display: inline-block; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .success { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Three-Tier Architecture Lab</h2>
+        <p>Frontend -> Backend -> Database Tier</p>
+        <div id="status">Checking backend connection...</div>
+    </div>
+    <script>
+        fetch('/api/health')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('status').innerHTML = 
+                    `<span class="success">Status: ${data.status}</span><br>Details: ${data.tier}`;
+            })
+            .catch(err => {
+                document.getElementById('status').innerText = 'Error connecting to backend tier.';
+            });
+    </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "three-tier-app",
+  "version": "1.0.0",
+  "description": "Sample three-tier app for GKE lab",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "lint": "echo \"No linting errors (sample)\""
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
