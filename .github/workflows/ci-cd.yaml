@@ -10,7 +10,8 @@ env:
   WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_SA_EMAIL }}
   REGION: us-central1
   REPOSITORY: app-repo
-  IMAGE: three-tier-app
+  FRONTEND_IMAGE: three-tier-app
+  BACKEND_IMAGE: backend-app
 
 jobs:
   ci-code-quality-and-tests:
@@ -24,7 +25,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-#Commands
 
       - name: Install Dependencies
         run: npm install
@@ -65,21 +65,25 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
-      - name: Build Docker Image
+      - name: Build and Push Frontend Image
         run: |
-          docker build -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:${{ github.sha }} .
+          FRONTEND_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
+          docker build -t ${FRONTEND_TAG} .
+          docker push ${FRONTEND_TAG}
+
+      - name: Build and Push Backend Image
+        run: |
+          BACKEND_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
+          docker build -t ${BACKEND_TAG} ./backend
+          docker push ${BACKEND_TAG}
 
       - name: Run Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:${{ github.sha }}'
+          image-ref: '${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}'
           format: 'table'
-          exit-code: '0' # Set to '0' so it logs warnings without failing the pipeline
+          exit-code: '0'
           severity: 'CRITICAL'
-
-      - name: Push Image to Artifact Registry
-        run: |
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:${{ github.sha }}
 
   cd-deploy-to-gke:
     name: CD - Deploy to GKE
@@ -113,10 +117,16 @@ jobs:
 
       - name: Deploy to GKE Cluster
         run: |
-          IMAGE_URL="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:${{ github.sha }}"
+          FRONTEND_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
+          BACKEND_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
           
-          sed -i "s|__IMAGE_PLACEHOLDER__|${IMAGE_URL}|g" manifests/deployment.yaml
+          sed -i "s|__IMAGE_PLACEHOLDER__|${FRONTEND_TAG}|g" manifests/deployment.yaml
+          sed -i "s|__BACKEND_IMAGE_PLACEHOLDER__|${BACKEND_TAG}|g" manifests/backend-deployment.yaml
           
-          kubectl apply -f manifests/
+          kubectl apply -f manifests/postgres.yaml
+          kubectl apply -f manifests/backend-deployment.yaml
+          kubectl apply -f manifests/deployment.yaml
           
+          kubectl rollout status deployment/postgres-deployment
+          kubectl rollout status deployment/backend-deployment
           kubectl rollout status deployment/three-tier-frontend-deployment
